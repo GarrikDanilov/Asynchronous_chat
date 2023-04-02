@@ -9,13 +9,15 @@ with open('test_file.txt', 'w') as f_out:
     for line in test_str:
         f_out.write(f'{line}\n')
 print(f'Кодировка файла по умолчанию - {f_out.encoding}.\n')
+# Кодировка файла по умолчанию - cp1251.
 
-with open('test_file.txt', encoding='utf-8') as f_in:
-    try:
+try:
+    with open('test_file.txt', encoding='utf-8') as f_in:
         for line in f_in:
             print(line)
-    except UnicodeDecodeError as er:
-        print(f'Ошибка декодирования: {er}')
+except UnicodeDecodeError as er:
+    print(f'Ошибка декодирования: {er}')
+# Ошибка декодирования: 'utf-8' codec can't decode byte 0xf1 in position 0: invalid continuation byte
 
 # Открытие файла в правильной кодировке
 print(f'\nОткрытие файла в правильной кодировке:')
