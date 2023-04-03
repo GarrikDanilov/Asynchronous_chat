@@ -4,11 +4,17 @@
 Unicode и вывести его содержимое.
 """
 
-test_str = ('сетевое программирование', 'сокет', 'декоратор')
-with open('test_file.txt', 'w') as f_out:
-    for line in test_str:
-        f_out.write(f'{line}\n')
-print(f'Кодировка файла по умолчанию - {f_out.encoding}.\n')
+from chardet.universaldetector import UniversalDetector
+
+
+Detector = UniversalDetector()
+with open('test_file.txt', 'rb') as f:
+    for line in f:
+        Detector.feed(line)
+        if Detector.done:
+            break
+    Detector.close()
+print(f'Кодировка файла по умолчанию - {Detector.result["encoding"]}.\n')
 # Кодировка файла по умолчанию - cp1251.
 
 try:
@@ -17,10 +23,10 @@ try:
             print(line)
 except UnicodeDecodeError as er:
     print(f'Ошибка декодирования: {er}')
-# Ошибка декодирования: 'utf-8' codec can't decode byte 0xf1 in position 0: invalid continuation byte
+# В случае отличия кодировки возникнет ошибка декодирования: 'utf-8' codec can't decode byte 0xf1 in position 0: invalid continuation byte
 
 # Открытие файла в правильной кодировке
 print(f'\nОткрытие файла в правильной кодировке:')
-with open('test_file.txt', encoding=f_out.encoding) as f_in:
+with open('test_file.txt', encoding=Detector.result['encoding']) as f_in:
     for line in f_in:
         print(line)
