@@ -1,0 +1,18 @@
+{
+    "orders": [
+        {
+            "item": "book",
+            "quantity": 1,
+            "price": 500,
+            "buyer": "Nik",
+            "data": "07.04.2023"
+        },
+        {
+            "item": "принтер",
+            "quantity": 1,
+            "price": 3500,
+            "buyer": "Иван",
+            "data": "07.04.2023"
+        }
+    ]
+}
