@@ -1,7 +1,12 @@
 import argparse
 import socket
 import time
+import logging
 import common
+import log.client_log_config
+
+
+logger = logging.getLogger('client')
 
 
 def create_presence(account_name, status):
@@ -15,6 +20,8 @@ def create_presence(account_name, status):
         }
     }
 
+    logger.debug(f'Создано presence сообщение для пользователя {account_name}')
+
     return msg
 
 
@@ -25,7 +32,7 @@ def main(addr, port):
     msg_to_server = create_presence('user1', 'active')
     common.send_msg(msg_to_server, sock)
     msg_from_server = common.get_msg(sock)
-    print(msg_from_server)
+    logger.info(msg_from_server)
     sock.close()
 
 
@@ -41,4 +48,7 @@ if __name__ == '__main__':
 
         main(args.addr, args.port)
     except ValueError:
-        print(f'Номер порта должен быть в диапазоне от 1024 до 65535')
+        logger.error(f'Некорректный номер порта - {args.port}. Номер порта должен быть \
+в диапазоне от 1024 до 65535')
+    except ConnectionRefusedError:
+        logger.critical(f'Не удалось подключиться к серверу - {args.addr}:{args.port}')
