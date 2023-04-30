@@ -4,11 +4,13 @@ import time
 import common
 import logging
 import log.server_log_config
+from decos import Log
 
 
 logger = logging.getLogger('server')
 
 
+@Log(logger)
 def create_response(msg):
     if 'action' in msg and msg['action'] == 'presence':
         logger.debug('Создан ответ клиенту с кодом 200')
@@ -55,3 +57,11 @@ if __name__ == '__main__':
     except ValueError:
         logger.error(f'Некорректный номер порта - {args.port}. Номер порта должен быть \
 в диапазоне от 1024 до 65535')
+
+
+"""
+2023-04-30 10:49:31,703 DEBUG decos Вызвана функция create_response с аргументами 
+({'action': 'presence', 'time': 1682840971.70171, 'type': 'status', 'user': {'account_name': 'user1', 'status': 'active'}},), {}.
+  Вызов из модуля server.
+  Функция create_response вызвана из функции main.
+"""

@@ -4,11 +4,13 @@ import time
 import logging
 import common
 import log.client_log_config
+from decos import log
 
 
 logger = logging.getLogger('client')
 
 
+@log(logger)
 def create_presence(account_name, status):
     msg = {
         'action': 'presence',
@@ -52,3 +54,10 @@ if __name__ == '__main__':
 в диапазоне от 1024 до 65535')
     except ConnectionRefusedError:
         logger.critical(f'Не удалось подключиться к серверу - {args.addr}:{args.port}')
+
+
+"""
+2023-04-30 10:41:38,235 DEBUG decos Вызвана функция create_presence с аргументами ('user1', 'active'), {}.
+  Вызов из модуля client.
+  Функция create_presence вызвана из функции main.
+"""
