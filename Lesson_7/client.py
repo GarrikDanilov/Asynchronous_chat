@@ -1,3 +1,4 @@
+import sys
 import argparse
 import socket
 import time
@@ -27,6 +28,34 @@ def create_presence(account_name, status):
     return msg
 
 
+def create_msg(addressee, account_name, msg):
+    out = {
+        'action': 'msg',
+        'time': time.time(),
+        'to': addressee,
+        'from': account_name,
+        'message': msg
+    }
+
+    logger.debug(f'Создано сообщение {out}')
+    return out
+
+
+def get_args():
+    parser = argparse.ArgumentParser(description='Client script')
+    parser.add_argument('addr', help='IP-адрес сервера')
+    parser.add_argument('port', nargs='?', default=common.DEFAULT_PORT, type=int, 
+                        help=f'TCP-порт на сервере, по умолчанию {common.DEFAULT_PORT}')
+    
+    args = parser.parse_args()
+    if args.port < 1024 or args.port > 65535:
+        logger.error(f'Некорректный номер порта - {args.port}. Номер порта должен быть \
+в диапазоне от 1024 до 65535')
+        sys.exit(1)     
+
+    return args.addr, args.port 
+
+
 def main(addr, port):
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.connect((addr, port))
@@ -39,21 +68,11 @@ def main(addr, port):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Client script')
-    parser.add_argument('addr', help='IP-адрес сервера')
-    parser.add_argument('port', nargs='?', default=common.DEFAULT_PORT, type=int, 
-                        help=f'TCP-порт на сервере, по умолчанию {common.DEFAULT_PORT}')
     try:
-        args = parser.parse_args()
-        if args.port < 1024 or args.port > 65535:
-            raise ValueError
-
-        main(args.addr, args.port)
-    except ValueError:
-        logger.error(f'Некорректный номер порта - {args.port}. Номер порта должен быть \
-в диапазоне от 1024 до 65535')
+        addr, port = get_args()
+        main(addr, port)
     except ConnectionRefusedError:
-        logger.critical(f'Не удалось подключиться к серверу - {args.addr}:{args.port}')
+        logger.critical(f'Не удалось подключиться к серверу - {addr}:{port}')
 
 
 """

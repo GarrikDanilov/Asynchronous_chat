@@ -1,3 +1,4 @@
+import sys
 import argparse
 import socket
 import time
@@ -28,10 +29,33 @@ def create_response(msg):
     }
 
 
-def main(addr, port):
+def get_args():
+    parser = argparse.ArgumentParser(description='Server script')
+    parser.add_argument('-p', dest='port', default=common.DEFAULT_PORT, type=int, 
+                        help=f'TCP-порт, по умолчанию {common.DEFAULT_PORT}')
+    parser.add_argument('-a', dest='addr', default='', 
+                        help='IP-адрес для прослушивания, по умолчанию все доступные адреса')
+    
+    args = parser.parse_args()
+    if args.port < 1024 or args.port > 65535:
+        logger.error(f'Некорректный номер порта - {args.port}. Номер порта должен быть \
+в диапазоне от 1024 до 65535')
+        sys.exit(1)     
+
+    return args.addr, args.port
+
+
+def new_listen_socket(addr, port):
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.bind((addr, port))
     sock.listen(common.MAX_CONNECTIONS)
+    sock.settimeout(common.MAX_TIMEOUT)
+
+    return sock
+
+
+def main(addr, port):
+    sock = new_listen_socket(addr, port)
 
     while True:
         client, addr = sock.accept()
@@ -43,20 +67,8 @@ def main(addr, port):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Server script')
-    parser.add_argument('-p', dest='port', default=common.DEFAULT_PORT, type=int, 
-                        help=f'TCP-порт, по умолчанию {common.DEFAULT_PORT}')
-    parser.add_argument('-a', dest='addr', default='', 
-                        help='IP-адрес для прослушивания, по умолчанию все доступные адреса')
-    try:
-        args = parser.parse_args()
-        if args.port < 1024 or args.port > 65535:
-            raise ValueError
-
-        main(args.addr, args.port)
-    except ValueError:
-        logger.error(f'Некорректный номер порта - {args.port}. Номер порта должен быть \
-в диапазоне от 1024 до 65535')
+    addr, port = get_args()
+    main(addr, port)
 
 
 """
