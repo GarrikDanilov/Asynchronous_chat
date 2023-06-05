@@ -13,8 +13,6 @@ class User(Base):
     username = Column(String, unique=True)
     last_login = Column(DateTime, default=datetime.utcnow,
                         server_default=func.now())
-    contacts_id = Column(Integer, ForeignKey("contacts.id"))
-    contacts = relationship("Contacts", back_populates="users")
 
     def __init__(self, username):
         self.username = username
@@ -23,7 +21,7 @@ class User(Base):
 class History(Base):
     __tablename__ = 'user_history'
     id = Column(Integer, primary_key=True)
-    user = Column(Integer, ForeignKey("users.id"), unique=True)
+    user = Column(Integer, ForeignKey("users.id"))
     login_time = Column(DateTime)
     ip_address = Column(String)
 
@@ -36,7 +34,9 @@ class History(Base):
 class Contacts(Base):
     __tablename__ = 'contacts'
     id = Column(Integer, primary_key=True)
-    users = relationship("User", back_populates="contacts")
+    user_id = Column(Integer, ForeignKey("users.id"))
+    contact_id = Column(Integer, ForeignKey("users.id"))
 
-
-
+    def __init__(self, user_id, contact_id):
+        self.user_id = user_id
+        self.contact_id = contact_id

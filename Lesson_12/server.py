@@ -8,6 +8,7 @@ import log.server_log_config
 from decos import Log
 from descriptors import ValidatingPort
 from metaclasses import ServerVerifier
+from server_storage import ServerStorage
 
 
 logger = logging.getLogger('server')
@@ -32,12 +33,14 @@ def get_args():
 class Server(metaclass=ServerVerifier):
     port = ValidatingPort(logger)
 
-    def __init__(self, addr, port):
+    def __init__(self, addr, port, database):
         self.addr = addr
         self.port = port
+        self.db = database
         self.clients = []
         self.logins = dict()
         self.messages = []
+        self.commands = []
     
     def create_socket(self):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -70,6 +73,25 @@ class Server(metaclass=ServerVerifier):
             raise ConnectionError
         else:
             raise NotFoundError
+        
+    def process_commands(self, command, socks):
+        if command['action'] == 'add_contact':
+            self.db.add_contact(command['user_login'], command['user_id'])
+            out_msg = {'response': 202}
+        elif command['action'] == 'del_contact':
+            self.db.del_contact(command['user_login'], command['user_id'])
+            out_msg = {'response': 202}
+        elif command['action'] == 'get_contacts':
+            contacts = self.db.get_contacts(command['user_login'])
+            out_msg = {
+                'response': 202,
+                'alert': contacts
+            }
+
+        if self.logins[command['user_login']] not in socks:
+            raise ConnectionError
+        
+        send_msg(out_msg, self.logins[command['user_login']])
     
     def main_loop(self):
         self.create_socket()
@@ -100,9 +122,15 @@ class Server(metaclass=ServerVerifier):
                         if msg_from_client['action'] == 'presence':
                             msg_to_client = self.create_response(msg_from_client)
                             send_msg(msg_to_client, client)
-                            self.logins[msg_from_client['user']['account_name']] = client
+                            login = msg_from_client['user']['account_name']
+                            ip, _ = client.getpeername()
+                            self.logins[login] = client
+                            self.db.log_in(login)
+                            self.db.add_history(login, ip)
                         elif msg_from_client['action'] == 'msg':
                             self.messages.append(msg_from_client)
+                        else:
+                            self.commands.append(msg_from_client)
                     except:
                         logger.info(f'Клиент {client.getpeername()} отключился от сервера')
                         self.clients.remove(client)
@@ -128,11 +156,23 @@ class Server(metaclass=ServerVerifier):
                         del self.logins[msg["from"]]
             self.messages.clear()
 
+            for command in self.commands:
+                try:
+                    self.process_commands(command, w_clients)
+                except ConnectionError:
+                    logger.info(f'Клиент {command["user_login"]} отключился от сервера')
+                    self.clients.remove(self.logins[command["user_login"]])
+                    del self.logins[command["user_login"]]
+            self.commands.clear()
+
 
 def main():
     addr, port = get_args()
 
-    server = Server(addr, port)
+    db_url = 'sqlite:///server.sqlite3'
+    db = ServerStorage(db_url)
+
+    server = Server(addr, port, db)
     server.main_loop()
 
 

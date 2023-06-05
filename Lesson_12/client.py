@@ -8,6 +8,7 @@ import log.client_log_config
 from common import DEFAULT_PORT, send_msg, get_msg
 from decos import log
 from metaclasses import ClientVerifier
+from client_storage import ClientStorage
 
 
 class ServerError(Exception):
@@ -35,9 +36,10 @@ def get_args():
 
 class Client(metaclass=ClientVerifier):
 
-    def __init__(self, login, sock, status='active'):
+    def __init__(self, login, sock, database, status='active'):
         self.login = login
         self.sock = sock
+        self.db = database
         self.status = status
 
     @log(logger)
@@ -75,9 +77,28 @@ class Client(metaclass=ClientVerifier):
         logger.debug(f'Создано сообщение {out}')
         return out
     
+    def get_contacts(self):
+        msg = {
+            'action': 'get_contacts',
+            'time': time.time(),
+            'user_login': self.login
+        }
+        
+        send_msg(msg, self.sock)
+
+    def process_contact(self, contact, action):
+        msg = {
+            'action': action,
+            'user_id': contact,
+            'time': time.time(),
+            'user_login': self.login
+        }
+
+        send_msg(msg, self.sock)
+    
     def to_server(self):
         while True:
-            command = input('Отправить сообщение (s)/ Выйти (q): ')
+            command = input('Отправить сообщение (s)/ Отправить запрос (c)/ Выйти (q): ')
 
             if command == 'q':
                 self.sock.close()
@@ -88,18 +109,48 @@ class Client(metaclass=ClientVerifier):
 
                 try:
                     send_msg(self.create_msg(to_client, message), self.sock)
+                    self.db.add_contact(to_client)
+                    self.db.save_message(self.login, to_client, message)
                 except:
                     logger.critical(f'Соединение с сервером потеряно')
                     break
+            elif command == 'c':
+                subcommand = input('Получить список контактов (g)/ Добавить контакт (a)/ Удалить контакт(d): ')
+                if subcommand == 'g':
+                    try:
+                        self.get_contacts()
+                    except:
+                        logger.critical(f'Соединение с сервером потеряно')
+                        break
+                elif subcommand == 'a':
+                    contact = input('Введите контакт: ')
+                    try:
+                        self.process_contact(contact, 'add_contact')
+                    except:
+                        logger.critical(f'Соединение с сервером потеряно')
+                        break
+                elif subcommand == 'd':
+                    contact = input('Введите контакт: ')
+                    try:
+                        self.process_contact(contact, 'del_contact')
+                    except:
+                        logger.critical(f'Соединение с сервером потеряно')
+                        break
 
     def from_server(self):
         while True:
             try:
                 message = get_msg(self.sock)
-                if 'response' in message:
+                if 'response' in message and message["response"] == 404:
                     print(f'\nОшибка: {message["error"]}')
+                elif 'response' in message and message["response"] == 202:
+                    print('Запрос выполнен \n')
+                    if 'alert' in message:
+                        print(f'Получен ответ: {message["alert"]}')
                 else:
                     print(f'\n{message["from"]}: {message["message"]}')
+                    self.db.add_contact(message["from"])
+                    self.db.save_message(message["from"], self.login, message["message"])
             except:
                 logger.critical(f'Соединение с сервером потеряно')
                 break
@@ -146,7 +197,10 @@ def main(login, addr, port):
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.connect((addr, port))
 
-    client = Client(login, sock)
+    db_url = 'sqlite:///client.sqlite3'
+    db = ClientStorage(db_url)
+
+    client = Client(login, sock, db)
     client.create()
     client.start_full()
 
