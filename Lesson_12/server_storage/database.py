@@ -1,7 +1,7 @@
 from datetime import datetime
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from models import Base, User, History, Contacts
+from server_storage.models import Base, User, History, Contacts
 
 
 DB_URL = 'sqlite:///server_db.sqlite3'
@@ -26,6 +26,15 @@ class ServerStorage:
             self.session.add(new_user)
         
         self.session.commit()
+
+    def get_user(self, username=None):
+        if username:
+            user = self.session.query(User.id, User.username, User.last_login). \
+                filter_by(username=username).first()
+            return user
+        
+        query = self.session.query(User.id, User.username, User.last_login)
+        return query.all()
     
     def add_history(self, username, ip_address):
         user = self.session.query(User).filter_by(username=username).first()
@@ -85,6 +94,9 @@ if __name__ == '__main__':
     db.add_contact('user5', 'user3')
     db.add_contact('user5', 'user1')
 
-    print(db.get_contacts('user5'))
-    print(db.get_history('user1'))
-    print(db.get_history())
+    # print(db.get_contacts('user5'))
+    # print(db.get_history('user1'))
+    # print(db.get_history())
+    i = db.get_user('user1')[2].strftime('%d.%m.%y %H:%M:%S')
+    print(i)
+    print(type(i))

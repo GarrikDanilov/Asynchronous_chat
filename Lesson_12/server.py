@@ -1,36 +1,44 @@
+import os
+import sys
 import argparse
+import configparser
 import logging
 import socket
 import select
 import time
+import threading
+from PyQt6.QtWidgets import QApplication, QMessageBox
+from PyQt6.QtCore import QTimer
 from common import DEFAULT_PORT, MAX_CONNECTIONS, MAX_TIMEOUT, send_msg, get_msg
 import log.server_log_config
 from decos import Log
 from descriptors import ValidatingPort
 from metaclasses import ServerVerifier
 from server_storage import ServerStorage
+import server_gui as gui
 
 
 logger = logging.getLogger('server')
+
+new_connection = False
+conflag_lock = threading.Lock()
 
 
 class NotFoundError(Exception):
     pass
 
 
-def get_args():
+def get_args(default_port, default_address):
     parser = argparse.ArgumentParser(description='Server script')
-    parser.add_argument('-p', dest='port', default=DEFAULT_PORT, type=int, 
-                        help=f'TCP-порт, по умолчанию {DEFAULT_PORT}')
-    parser.add_argument('-a', dest='addr', default='', 
-                        help='IP-адрес для прослушивания, по умолчанию все доступные адреса')
+    parser.add_argument('-p', dest='port', default=default_port, type=int)
+    parser.add_argument('-a', dest='addr', default=default_address)
     
-    args = parser.parse_args()    
+    args = parser.parse_args(sys.argv[1:])    
 
     return args.addr, args.port
 
 
-class Server(metaclass=ServerVerifier):
+class Server(threading.Thread, metaclass=ServerVerifier):
     port = ValidatingPort(logger)
 
     def __init__(self, addr, port, database):
@@ -41,6 +49,8 @@ class Server(metaclass=ServerVerifier):
         self.logins = dict()
         self.messages = []
         self.commands = []
+
+        super().__init__()
     
     def create_socket(self):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -93,7 +103,7 @@ class Server(metaclass=ServerVerifier):
         
         send_msg(out_msg, self.logins[command['user_login']])
     
-    def main_loop(self):
+    def run(self):
         self.create_socket()
 
         r_clients = []
@@ -167,13 +177,83 @@ class Server(metaclass=ServerVerifier):
 
 
 def main():
-    addr, port = get_args()
+    config = configparser.ConfigParser()
+    dir_path = os.path.dirname(os.path.realpath(__file__))
+    config.read(f"{dir_path}/{'server.ini'}")
+    
+    addr, port = get_args(config['SETTINGS']['default_port'], 
+                          config['SETTINGS']['listen_address'])
+    
+    full_path = os.path.join(config['SETTINGS']['db_path'], 
+                                                 config['SETTINGS']['db_file'])
 
-    db_url = 'sqlite:///server.sqlite3'
-    db = ServerStorage(db_url)
+    db = ServerStorage(f"sqlite:///{full_path}")
 
     server = Server(addr, port, db)
-    server.main_loop()
+    server.daemon = True
+    server.start()
+
+    admin_gui = QApplication(sys.argv)
+    main_window = gui.MainWindow()
+    main_window.statusBar().showMessage('Server working')
+    main_window.clients_table.setModel(gui.create_user_model(db))
+    main_window.clients_table.resizeColumnsToContents()
+    main_window.clients_table.resizeRowsToContents()
+
+    def list_update():
+        global new_connection
+        if new_connection:
+            main_window.clients_table.setModel(gui.create_user_model(db))
+            main_window.clients_table.resizeColumnsToContents()
+            main_window.clients_table.resizeRowsToContents()
+        with conflag_lock:
+            new_connection = False
+
+    def show_stat():
+        global stat_window
+        stat_window = gui.HistoryWindow()
+        stat_window.history_table.setModel(gui.create_history_model(db))
+        stat_window.history_table.resizeColumnsToContents()
+        stat_window.history_table.resizeRowsToContents()
+        stat_window.show()
+
+    def server_config():
+        global config_window
+        config_window = gui.ConfigWindow()
+        config_window.db_path.insert(config['SETTINGS']['db_path'])
+        config_window.db_file.insert(config['SETTINGS']['db_file'])
+        config_window.port.insert(config['SETTINGS']['default_port'])
+        config_window.ip.insert(config['SETTINGS']['listen_address'])
+        config_window.save_btn.clicked.connect(save_server_config)
+
+    def save_server_config():
+        global config_window
+        message = QMessageBox()
+        config['SETTINGS']['db_path'] = config_window.db_path.text()
+        config['SETTINGS']['db_file'] = config_window.db_file.text()
+        try:
+            port = int(config_window.port.text())
+        except ValueError:
+            message.warning(config_window, 'Ошибка', 'Порт должен быть числом')
+        else:
+            config['SETTINGS']['listen_address'] = config_window.ip.text()
+            if 1023 < port < 65536:
+                config['SETTINGS']['default_port'] = str(port)
+                with open(f"{dir_path}/{'server.ini'}", 'w') as conf:
+                    config.write(conf)
+                    message.information(config_window, 'ОК', 'Настройки успешно сохранены')
+            else:
+                message.warning(config_window, 'Ошибка', 'Порт должен быть от 1024 до 65536')
+    
+    timer = QTimer()
+    timer.timeout.connect(list_update)
+    timer.start(1000)
+
+    main_window.refresh_btn.triggered.connect(list_update)
+    main_window.stat_btn.triggered.connect(show_stat)
+    main_window.conf_btn.triggered.connect(server_config)
+
+    admin_gui.exec()
 
 
 if __name__ == '__main__':
